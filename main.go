@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rs/xid"
 )
 
 var recipes []Recipe
