@@ -8,10 +8,29 @@ swagger: ### Launch OpenAPI page
 	swagger serve -F swaggesr ./swagger.json
 .PHONY: swagger
 
-run: ### Start Rest API server
-	go run main.go
+run: rundb ### Start Rest API server
+	# MONGO_URI="mongodb://admin:password@localhost:27017/demo?authSource=admin" MONGO_DATABASE=demo go run main.go
+	MONGO_URI="mongodb://admin:password@localhost:27017/demo?authSource=admin" MONGO_DATABASE=demo go run main.go
 .PHONY: run
 
 build: ### Build program
 	go build main.go
 .PHONY: build
+
+rundb: ### Start MongoDB
+	# docker run -d --name mongo -v ${PWD}/data:/data/db -e MONGO_INITDB_ROOT_USERNAME=admin -e MONGO_INITDB_ROOT_PASSWORD=password -p 27017:27017 mongo:8-noble
+	docker compose up -d
+.PHONY: rundb
+
+initdb:
+	# docker exec -i mongo mongoimport --username admin --password password --authenticationDatabase admin --db demo --collection recipes2 --file /docker-entrypoint-initdb.d/recipes.json --jsonArray
+	docker exec -i mongo mongoimport --username admin --password password --authenticationDatabase admin --db demo --collection recipes --jsonArray < recipes.json
+.PHONY: initdb
+
+testdb:
+	docker exec -it mongo mongosh -u admin -p password
+	show dbs
+	use demo
+	show collections
+	db.recipes.find().pretty()
+.PHONY: testdb
