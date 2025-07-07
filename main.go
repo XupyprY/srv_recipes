@@ -218,24 +218,30 @@ func UpdateRecipeHandler(c *gin.Context) {
 //	'404':
 //	    description: Invalid recipe ID
 func DeleteRecipeHandler(c *gin.Context) {
-	// id := c.Param("id")
+	id := c.Param("id")
 
-	// index := -1
-	// for i := 0; i < len(recipes); i++ {
-	// 	if recipes[i].ID == id {
-	// 		index = i
-	// 		break
-	// 	}
-	// }
+	// Преобразуем строку в ObjectID
+	objectID, err := bson.ObjectIDFromHex(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
 
-	// if index == -1 {
-	// 	c.JSON(http.StatusNotFound, gin.H{"error": "Recipe not found"})
-	// 	return
-	// }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	// recipes = append(recipes[:index], recipes[index+1:]...)
+	result, err := collection.DeleteOne(ctx, bson.M{"_id": objectID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete recipe"})
+		return
+	}
 
-	// c.JSON(http.StatusOK, gin.H{"message": "Recipe has been deleted"})
+	if result.DeletedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Recipe not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Recipe has been deleted"})
 }
 
 // swagger:operation GET /recipes/search recipes findRecipe
@@ -255,22 +261,47 @@ func DeleteRecipeHandler(c *gin.Context) {
 //	'200':
 //	    description: Successful operation
 func SearchRecipesHandler(c *gin.Context) {
-	// tag := c.Query("tag")
-	// listOfRecipes := make([]Recipe, 0)
+	tag := c.Query("tag")
+	if tag == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing tag query parameter"})
+		return
+	}
 
-	// for i := 0; i < len(recipes); i++ {
-	// 	found := false
-	// 	for _, t := range recipes[i].Tags {
-	// 		if strings.EqualFold(t, tag) {
-	// 			found = true
-	// 		}
-	// 	}
-	// 	if found {
-	// 		listOfRecipes = append(listOfRecipes, recipes[i])
-	// 	}
-	// }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	// c.JSON(http.StatusOK, listOfRecipes)
+	// Поиск документов, где "tags" содержит указанный тег (регистр — не чувствителен)
+	filter := bson.M{
+		"tags": bson.M{
+			"$elemMatch": bson.M{
+				"$regex":   tag,
+				"$options": "i", // i = ignore case
+			},
+		},
+	}
+
+	cur, err := collection.Find(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+	defer cur.Close(ctx)
+
+	var recipes []Recipe
+	for cur.Next(ctx) {
+		var r Recipe
+		if err := cur.Decode(&r); err != nil {
+			continue
+		}
+		recipes = append(recipes, r)
+	}
+
+	if err := cur.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Cursor error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, recipes)
 }
 
 // swagger:operation GET /recipes/{id} recipes oneRecipe
@@ -317,7 +348,8 @@ func init() {
 		ApplyURI(uri).
 		SetServerSelectionTimeout(5 * time.Second)
 
-	client, err := mongo.Connect(clientOpts)
+	var err error
+	client, err = mongo.Connect(clientOpts)
 	if err != nil {
 		log.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
