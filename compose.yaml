@@ -1,0 +1,26 @@
+services:
+  mongo:
+    image: mongo:8-noble
+    container_name: mongo
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_DATABASE: demo
+    volumes:
+      - ./initdb.js:/docker-entrypoint-initdb.d/initdb.js
+      - ./recipes.json:/docker-entrypoint-initdb.d/recipes.json
+
+  mongo-express:
+    image: mongo-express
+    container_name: mongo_express
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongo:27017/
+      ME_CONFIG_BASICAUTH: false
+    depends_on:
+      - mongo
