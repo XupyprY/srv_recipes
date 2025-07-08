@@ -34,3 +34,6 @@ testdb:
 	show collections
 	db.recipes.find().pretty()
 .PHONY: testdb
+
+redislab: ### Start relis IU tool
+	docker run -d --name redisinsight --link redis -p 8001:8001 redislabs/redisinsight
