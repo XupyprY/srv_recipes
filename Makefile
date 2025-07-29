@@ -5,7 +5,7 @@ help: ## Display this help screen
 
 swagger: ### Launch OpenAPI page
 	swagger generate spec -o ./swagger.json
-	swagger serve -F swaggesr ./swagger.json
+	swagger serve -F swagger ./swagger.json
 .PHONY: swagger
 
 run: rundb ### Start Rest API server
@@ -21,6 +21,10 @@ rundb: ### Start MongoDB
 	# docker run -d --name mongo -v ${PWD}/data:/data/db -e MONGO_INITDB_ROOT_USERNAME=admin -e MONGO_INITDB_ROOT_PASSWORD=password -p 27017:27017 mongo:8-noble
 	docker compose up -d
 .PHONY: rundb
+
+initcert: ### create self-signed certificate
+	mkdir -p certs
+	openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certs/key.pem -out certs/cert.pem -subj "/C=LV/ST=Riga/L=Riga/O=MyCompany/OU=MyDepartment/CN=localhost"
 
 initdb:
 	# docker exec -i mongo mongoimport --username admin --password password --authenticationDatabase admin --db demo --collection recipes2 --file /docker-entrypoint-initdb.d/recipes.json --jsonArray

@@ -7,6 +7,7 @@ toolchain go1.24.4
 require (
 	github.com/gin-gonic/gin v1.10.1
 	go.mongodb.org/mongo-driver/v2 v2.2.2
+	github.com/golang-jwt/jwt/v5 v5.2.2
 )
 
 require (
