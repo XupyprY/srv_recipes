@@ -336,20 +336,20 @@ func (handler *RecipesHandler) GetRecipeHandler(c *gin.Context) {
 
 	redisKey := "recipes/" + objectID.Hex()
 
-	// 1. Проверка Redis
+	// 1. Checking Redis
 	cached, err := handler.redisClient.Get(redisKey).Result()
 	if err == nil {
-		// Найдено в Redis — возвращаем
+		// Found in Redis — return
 		var recipe models.Recipe
 		if jsonErr := json.Unmarshal([]byte(cached), &recipe); jsonErr == nil {
 			c.JSON(http.StatusOK, recipe)
 			log.Printf("Request to Redis")
 			return
 		}
-		// Если не удалось распарсить — продолжаем и обращаемся к БД
+		// If not able to parse, seek in the database
 	}
 
-	// 2. Не найдено в Redis — ищем в MongoDB
+	// 2. Not found in Redis — search in MongoDB
 	var recipe models.Recipe
 	err = handler.collection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&recipe)
 	if err != nil {
@@ -357,12 +357,12 @@ func (handler *RecipesHandler) GetRecipeHandler(c *gin.Context) {
 		return
 	}
 
-	// 3. Кэшируем в Redis
+	// 3. Caching in Redis
 	if data, err := json.Marshal(recipe); err == nil {
 		handler.redisClient.Set(redisKey, string(data), 0)
 		log.Printf("Request to MongoDB")
 	}
 
-	// 4. Возвращаем результат
+	// 4. prepare response
 	c.JSON(http.StatusOK, recipe)
 }

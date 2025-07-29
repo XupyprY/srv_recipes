@@ -2,17 +2,22 @@
 //
 // This is a sample recipes API. You can find out more about the API at https://github.com/XupyprY/srv_recipes.git
 //
-//		Schemes: http
-//	 Host: localhost:8080
-//		BasePath: /
-//		Version: 1.0.0
-//		Contact: Yuri Radionov <45962539+XupyprY@users.noreply.github.com>
+// Schemes: http
+// Host: localhost:8080
+// BasePath: /
+// Version: 1.0.0
+// Contact: Yuri Radionov <45962539+XupyprY@users.noreply.github.com>
+// SecurityDefinitions:
+// api_key:
+//   type: apiKey
+//   name: Authorization
+//   in: header
 //
-//		Consumes:
-//		- application/json
+// Consumes:
+// - application/json
 //
-//		Produces:
-//		- application/json
+// Produces:
+// - application/json
 //
 // swagger:meta
 package main
@@ -25,6 +30,7 @@ import (
 	"time"
 
 	handlers "srv_recipes/handlers"
+	services "srv_recipes/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
@@ -34,6 +40,8 @@ import (
 )
 
 var recipesHandler *handlers.RecipesHandler
+var authHandler *handlers.AuthHandler
+var userService *services.UserHandler
 
 func init() {
 	// recipes = make([]Recipe, 0)
@@ -71,16 +79,40 @@ func init() {
 
 	ctx := context.Background()
 	recipesHandler = handlers.NewRecipesHandler(ctx, collection, redisClient)
+	// userHandler = services.NewUserHandler(ctx, collection, redisClient)
+	// authHandler = handlers.NewAuthHandler(collection, redisClient)
+	userService = services.NewUserHandler(ctx, collection, redisClient)
+	authHandler = handlers.NewAuthHandler(userService, redisClient)
 }
 
 func main() {
 	router := gin.Default()
+	router.Use(gin.Logger())
 	router.GET("/recipes", recipesHandler.ListRecipesHandler)
 	router.GET("/recipes/:id", recipesHandler.GetRecipeHandler)
 	router.POST("/recipes", recipesHandler.NewRecipeHandler)
 	router.PUT("/recipes/:id", recipesHandler.UpdateRecipeHandler)
 	router.DELETE("/recipes/:id", recipesHandler.DeleteRecipeHandler)
 	router.GET("/recipes/search", recipesHandler.SearchRecipesHandler)
-	router.Run()
 
+	auth := router.Group("/auth")
+	{
+		auth.POST("/signup", authHandler.SignUp)
+		auth.POST("/verify", authHandler.Verify)
+		auth.POST("/singin", authHandler.Login)
+		auth.POST("/refresh", authHandler.Refresh)
+		// protected := auth.Group("/")
+		// protected.Use(handlers.JWTAuthMiddleware())
+		// {
+		// 	protected.POST("/logout", authHandler.Logout)
+		// 	protected.GET("/me", authHandler.Me)
+		// }
+	}
+	// router.Run()
+	router.RunTLS(":8080", "certs/cert.pem", "certs/key.pem")
+
+	//     if err := config.Init(); err != nil {
+	//     log.Fatalf("Init error: %v", err)
+	// }
+	// r.Run(":8080")
 }
