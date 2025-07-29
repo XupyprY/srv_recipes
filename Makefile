@@ -5,7 +5,7 @@ help: ## Display this help screen
 
 swagger: ### Launch OpenAPI page
 	swagger generate spec -o ./swagger.json
-	swagger serve -F swaggesr ./swagger.json
+	swagger serve -F swagger ./swagger.json
 .PHONY: swagger
 
 run: rundb ### Start Rest API server
@@ -22,6 +22,10 @@ rundb: ### Start MongoDB
 	docker compose up -d
 .PHONY: rundb
 
+initcert: ### create self-signed certificate
+	mkdir -p certs
+	openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certs/key.pem -out certs/cert.pem -subj "/C=LV/ST=Riga/L=Riga/O=MyCompany/OU=MyDepartment/CN=localhost"
+
 initdb:
 	# docker exec -i mongo mongoimport --username admin --password password --authenticationDatabase admin --db demo --collection recipes2 --file /docker-entrypoint-initdb.d/recipes.json --jsonArray
 	docker exec -i mongo mongoimport --username admin --password password --authenticationDatabase admin --db demo --collection recipes --jsonArray < recipes.json
@@ -34,3 +38,6 @@ testdb:
 	show collections
 	db.recipes.find().pretty()
 .PHONY: testdb
+
+redislab: ### Start relis IU tool
+	docker run -d --name redisinsight --link redis -p 8001:8001 redislabs/redisinsight

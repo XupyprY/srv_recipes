@@ -21,6 +21,73 @@
   "host": "localhost:8080",
   "basePath": "/",
   "paths": {
+    "/auth/refresh": {
+      "post": {
+        "description": "Refresh: проверяет refresh в Redis, выдаёт новую пару",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "auth"
+        ],
+        "operationId": "refresh",
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Token is new and doesn't need a refresh"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/auth/signin": {
+      "post": {
+        "description": "Login: возвращает access+refresh, сохраняет refresh в Redis",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "auth"
+        ],
+        "operationId": "signIn",
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/auth/signup": {
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "auth"
+        ],
+        "summary": "SignUp создаёт пользователя, возвращает verify token",
+        "operationId": "signup",
+        "parameters": [
+          {
+            "$ref": "#/definitions/SignUpRequest",
+            "description": "User signup credentials",
+            "name": "body",
+            "in": "body",
+            "required": true
+          }
+        ]
+      }
+    },
     "/recipes": {
       "get": {
         "description": "Returns list of recipes",
@@ -42,6 +109,18 @@
         ],
         "operationId": "newRecipe",
         "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "x-go-name": "CustomID",
+            "name": "customId",
+            "in": "query"
+          },
           {
             "type": "string",
             "x-go-name": "Name",
@@ -77,7 +156,6 @@
           },
           {
             "type": "string",
-            "format": "date-time",
             "x-go-name": "PublishedAt",
             "name": "publishedAt",
             "in": "query"
@@ -164,6 +242,36 @@
           }
         ]
       }
+    }
+  },
+  "definitions": {
+    "SignUpRequest": {
+      "description": "SignUpRequest represents the request body for user signup",
+      "type": "object",
+      "required": [
+        "Email",
+        "Password"
+      ],
+      "properties": {
+        "Email": {
+          "description": "User's email address",
+          "type": "string",
+          "example": "user@example.com"
+        },
+        "Password": {
+          "description": "User's password",
+          "type": "string",
+          "example": "strongpassword"
+        }
+      },
+      "x-go-package": "srv_recipes/handlers"
+    }
+  },
+  "securityDefinitions": {
+    "api_key": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header"
     }
   }
 }

@@ -9,6 +9,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: password
       MONGO_DATABASE: demo
     volumes:
+      - ./data/db:/data/db
       - ./initdb.js:/docker-entrypoint-initdb.d/initdb.js
       - ./recipes.json:/docker-entrypoint-initdb.d/recipes.json
 
@@ -24,3 +25,20 @@ services:
       ME_CONFIG_BASICAUTH: false
     depends_on:
       - mongo
+
+  redis:
+    image: redis:8-alpine
+    container_name: redis
+    ports:
+      - 6379:6379
+    volumes:
+      - ./conf/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./data/cache:/data
+
+  redislabs:
+    image: redislabs/redisinsight
+    container_name: redislabs
+    ports:
+      - 5540:5540
+    depends_on:
+      - redis
