@@ -10,10 +10,12 @@ swagger: ### Launch OpenAPI page
 
 run: rundb ### Start Rest API server
 	# MONGO_URI="mongodb://admin:password@localhost:27017/demo?authSource=admin" MONGO_DATABASE=demo go run main.go
-	MONGO_URI="mongodb://admin:password@localhost:27017/demo?authSource=admin" MONGO_DATABASE=demo go run main.go
+	MONGO_URI="mongodb://admin:password@localhost:27017/demo?authSource=admin" MONGO_DATABASE=demo PORT=8080 go run main.go
 .PHONY: run
 
 build: ### Build program
+	go mod tidy
+	go mod verify
 	go build main.go
 .PHONY: build
 
@@ -41,3 +43,10 @@ testdb:
 
 redislab: ### Start relis IU tool
 	docker run -d --name redisinsight --link redis -p 8001:8001 redislabs/redisinsight
+
+commit: ### Commit changes
+	git add .
+	git commit -m "session based authentication"
+	git checkout -b feature/session
+	git push origin feature/session
+.PHONY: commit

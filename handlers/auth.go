@@ -4,7 +4,6 @@ import (
 	// "context"
 	"net/http"
 	"time"
-	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
@@ -68,9 +67,11 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// swagger:operation POST /auth/signup auth signup
+// swagger:operation POST /auth/signup auth signUp
 //
-// # SignUp создаёт пользователя, возвращает verify token
+// Создает нового пользователя
+//
+// Принимает email и пароль для регистрации пользователя.
 //
 // ---
 // consumes:
@@ -78,54 +79,105 @@ type ErrorResponse struct {
 // produces:
 // - application/json
 // parameters:
-//   - name: body
-//     in: body
-//     description: User signup credentials
-//     required: true
-//     schema:
-//     "$ref": "#/definitions/SignUpRequest"
-//
+// - name: body
+//   in: body
+//   description: Email и пароль для регистрации
+//   required: true
+//   schema:
+//     type: object
+//     required:
+//       - email
+//       - password
+//     properties:
+//       email:
+//         type: string
+//         format: email
+//         example: user@example.com
+//       password:
+//         type: string
+//         format: password
+//         example: strongpassword123
 // responses:
-//	'200':
-//	  description: Successfully registered user
-//	  schema:
-//	    type: object
-//	    properties:
-//	      token:
-//	        type: string
-//	        description: Verification token
-//	'400':
-//	  description: Invalid request
-//	  schema:
-//	    type: object
-//	    properties:
-//	      error:
-//	        type: string
+//   '200':
+//     description: Пользователь успешно создан
+//     schema:
+//       type: object
+//       properties:
+//         access_token:
+//           type: string
+//           example: "short_life_access_token"
+//         refresh_token:
+//           type: string
+//           example: "long_life_refresh_token"
+//   '400':
+//     description: Некорректный запрос (например, отсутствуют поля email или password)
+//   '500':
+//     description: Внутренняя ошибка сервера
 func (h *AuthHandler) SignUp(c *gin.Context) {
 	var req SignUpRequest
-	if c.ShouldBindJSON(&req) != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
-	log.Println("SignUp request received:", req)
-	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	log.Println("Hashed password:", string(hash))
-	if err := h.userService.CreateUser(req.Email, string(hash)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	// Проверка: существует ли пользователь с таким email
+	existingUser, err := h.userService.GetUserByEmail(req.Email)
+	if err == nil && existingUser != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email is already in use. Please choose another one."})
 		return
 	}
-	verifyToken, _ := utils.GenerateAccessToken(req.Email)
-	accessToken, _ := utils.GenerateAccessToken(req.Email)
-	refreshToken, _ := utils.GenerateRefreshToken(req.Email)
+
+	// Хеширование пароля
+	hashedPwd, err := bcrypt.GenerateFromPassword([]byte("diduda" + req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Password hashing failed"})
+		return
+	}
+
+	// Создание нового пользователя и получение user_id
+	userID, err := h.userService.CreateUser(req.Email, string(hashedPwd))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		return
+	}
+
+	// Генерация токенов с user_id и ролями
+	roles := []string{"V01"}
+	accessToken, err := utils.GenerateAccessToken(userID, roles)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
+		return
+	}
+	refreshToken, err := utils.GenerateRefreshToken(userID, roles)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
+		return
+	}
+
+	// Сохранение refresh токена в Redis
+	err = h.redisClient.Set("refresh:"+userID, refreshToken, 7*24*time.Hour).Err()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
+		return
+	}
+
+	// Ответ клиенту
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "User created. Verify email.",
-		"verify_token": verifyToken,
-		"access_token": accessToken,
+		"access_token":  accessToken,
 		"refresh_token": refreshToken,
 	})
 }
 
+// swagger:operation POST /auth/verify auth verify
 // Verify: принимает verify token, делает verified=true
+// ---
+// produces:
+// - application/json
+// responses:
+//     '200':
+//         description: Successful operation
+//     '400':
+//         description: Verification error
 func (h *AuthHandler) Verify(c *gin.Context) {
 	var req struct{ VerifyToken string }
 	if c.ShouldBindJSON(&req) != nil {
@@ -161,23 +213,27 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 	user, err := h.userService.GetUserByEmail(req.Email)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)) != nil {
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.Password), []byte("diduda" + req.Password)) != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
-	if !user.Verified {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Email not verified"})
-		return
-	}
-	at, _ := utils.GenerateAccessToken(user.Email)
-	rt, _ := utils.GenerateRefreshToken(user.Email)
-	h.redisClient.Set("refresh:"+user.Email, rt, 7*24*time.Hour)
+
+	// if !user.Verified {
+	// 	c.JSON(http.StatusForbidden, gin.H{"error": "Email not verified"})
+	// 	return
+	// }
+	roles := []string{"V01"}
+	at, _ := utils.GenerateAccessToken(user.ID.(string), roles)
+	rt, _ := utils.GenerateRefreshToken(user.ID.(string), roles)
+	h.redisClient.Set("refresh:"+user.ID.(string), rt, 7*24*time.Hour)
 	c.JSON(http.StatusOK, gin.H{"access_token": at, "refresh_token": rt})
 }
 
 // swagger:operation POST /auth/refresh auth refresh
 // Refresh: проверяет refresh в Redis, выдаёт новую пару
 // ---
+// security:
+// - BearerAuth: []
 // produces:
 // - application/json
 // responses:
@@ -204,21 +260,53 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token mismatch"})
 		return
 	}
-	at, _ := utils.GenerateAccessToken(claims.UserID)
-	rt, _ := utils.GenerateRefreshToken(claims.UserID)
+	roles := []string{"V01"}
+	at, _ := utils.GenerateAccessToken(claims.UserID, roles)
+	rt, _ := utils.GenerateRefreshToken(claims.UserID, roles)
 	h.redisClient.Set("refresh:"+claims.UserID, rt, 7*24*time.Hour)
 	c.JSON(http.StatusOK, gin.H{"access_token": at, "refresh_token": rt})
 }
 
-// Logout: удаляет refresh токен из Redis
+// swagger:operation POST /auth/logout auth logout
+// Logout: удаляет refresh токен из Redis, требует Authorization заголовок с Bearer токеном
+// ---
+// security:
+// - BearerAuth: []
+// produces:
+// - application/json
+// responses:
+//     '200':
+//         description: Successful logout
+//     '401':
+//         description: Unauthorized (token missing or invalid)
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	h.redisClient.Del("refresh:" + userID.(string))
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
 
+// swagger:operation POST /auth/me auth me
 // Me: сохраняет и возвращает сессию
-func Me(c *gin.Context) {
+// ---
+// produces:
+// - application/json
+// responses:
+//     '200':
+//         description: Current session information
+//         schema:
+//             type: object
+//             properties:
+//                 userID:
+//                     type: string
+//                 ip:
+//                     type: string
+//                 userAgent:
+//                     type: string
+//                 location:
+//                     type: string
+//     '401':
+//         description: Unauthorized (token missing or invalid)
+func (h *AuthHandler) Me(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	ip := c.ClientIP()
 	ua := c.Request.UserAgent()

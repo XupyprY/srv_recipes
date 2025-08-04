@@ -21,6 +21,68 @@
   "host": "localhost:8080",
   "basePath": "/",
   "paths": {
+    "/auth/logout": {
+      "post": {
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "description": "Logout: удаляет refresh токен из Redis, требует Authorization заголовок с Bearer токеном",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "Successful logout"
+          },
+          "401": {
+            "description": "Unauthorized (token missing or invalid)"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "post": {
+        "description": "Me: сохраняет и возвращает сессию",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "auth"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "Current session information",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ip": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "userAgent": {
+                  "type": "string"
+                },
+                "userID": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized (token missing or invalid)"
+          }
+        }
+      }
+    },
     "/auth/refresh": {
       "post": {
         "description": "Refresh: проверяет refresh в Redis, выдаёт новую пару",
@@ -66,6 +128,7 @@
     },
     "/auth/signup": {
       "post": {
+        "description": "Принимает email и пароль для регистрации пользователя.",
         "consumes": [
           "application/json"
         ],
@@ -75,17 +138,79 @@
         "tags": [
           "auth"
         ],
-        "summary": "SignUp создаёт пользователя, возвращает verify token",
-        "operationId": "signup",
+        "summary": "Создает нового пользователя",
+        "operationId": "signUp",
         "parameters": [
           {
-            "$ref": "#/definitions/SignUpRequest",
-            "description": "User signup credentials",
+            "description": "Email и пароль для регистрации",
             "name": "body",
             "in": "body",
-            "required": true
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "email",
+                "password"
+              ],
+              "properties": {
+                "email": {
+                  "type": "string",
+                  "format": "email",
+                  "example": "user@example.com"
+                },
+                "password": {
+                  "type": "string",
+                  "format": "password",
+                  "example": "strongpassword123"
+                }
+              }
+            }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "Пользователь успешно создан",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "access_token": {
+                  "type": "string",
+                  "example": "short_life_access_token"
+                },
+                "refresh_token": {
+                  "type": "string",
+                  "example": "long_life_refresh_token"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректный запрос (например, отсутствуют поля email или password)"
+          },
+          "500": {
+            "description": "Внутренняя ошибка сервера"
+          }
+        }
+      }
+    },
+    "/auth/verify": {
+      "post": {
+        "description": "Verify: принимает verify token, делает verified=true",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "auth"
+        ],
+        "operationId": "verify",
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "400": {
+            "description": "Verification error"
+          }
+        }
       }
     },
     "/recipes": {

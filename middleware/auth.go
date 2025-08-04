@@ -15,13 +15,16 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid token"})
 			return
 		}
+
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 		claims, err := utils.ParseAccessToken(tokenStr)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
 		}
+
 		c.Set("userID", claims.UserID)
+		c.Set("roles", claims.Roles)
 		c.Next()
 	}
 }

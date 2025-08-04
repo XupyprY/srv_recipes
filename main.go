@@ -8,7 +8,7 @@
 // Version: 1.0.0
 // Contact: Yuri Radionov <45962539+XupyprY@users.noreply.github.com>
 // SecurityDefinitions:
-// api_key:
+// BearerAuth:
 //   type: apiKey
 //   name: Authorization
 //   in: header
@@ -31,8 +31,10 @@ import (
 
 	handlers "srv_recipes/handlers"
 	services "srv_recipes/services"
-
+	middleware "srv_recipes/middleware"
+	
 	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/cors"
 	"github.com/go-redis/redis"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -75,19 +77,31 @@ func init() {
 	}
 
 	collection := client.Database("demo").Collection("recipes")
+	collectionUser := client.Database("demo").Collection("users")
 	log.Println("Connected to MongoDB")
 
 	ctx := context.Background()
 	recipesHandler = handlers.NewRecipesHandler(ctx, collection, redisClient)
-	// userHandler = services.NewUserHandler(ctx, collection, redisClient)
+	// userHandler = services.NewUserHandler(ctx, collectionUser, redisClient)
 	// authHandler = handlers.NewAuthHandler(collection, redisClient)
-	userService = services.NewUserHandler(ctx, collection, redisClient)
+	userService = services.NewUserHandler(ctx, collectionUser, redisClient)
 	authHandler = handlers.NewAuthHandler(userService, redisClient)
 }
 
 func main() {
 	router := gin.Default()
 	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
+	router.SetTrustedProxies(nil)
+	// ✅ Разрешаем Swagger и фронту делать OPTIONS
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"}, // или укажи конкретный домен Swagger UI
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))	
+
 	router.GET("/recipes", recipesHandler.ListRecipesHandler)
 	router.GET("/recipes/:id", recipesHandler.GetRecipeHandler)
 	router.POST("/recipes", recipesHandler.NewRecipeHandler)
@@ -101,15 +115,15 @@ func main() {
 		auth.POST("/verify", authHandler.Verify)
 		auth.POST("/singin", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)
-		// protected := auth.Group("/")
-		// protected.Use(handlers.JWTAuthMiddleware())
-		// {
-		// 	protected.POST("/logout", authHandler.Logout)
-		// 	protected.GET("/me", authHandler.Me)
-		// }
+		protected := auth.Group("/")
+		protected.Use(middleware.JWTAuthMiddleware())
+		{
+			protected.POST("/logout", authHandler.Logout)
+			protected.POST("/me", authHandler.Me)
+		}
 	}
-	// router.Run()
-	router.RunTLS(":8080", "certs/cert.pem", "certs/key.pem")
+	router.Run()
+	// router.RunTLS(":8080", "certs/cert.pem", "certs/key.pem")
 
 	//     if err := config.Init(); err != nil {
 	//     log.Fatalf("Init error: %v", err)

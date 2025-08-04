@@ -2,14 +2,17 @@ package services
 
 import (
 	"context"
+	"strings"
 	"errors"
 	"time"
+	"fmt"
 
 	"srv_recipes/models"
 
 	"github.com/go-redis/redis"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	// "go.mongodb.org/mongo-driver/v2/bson/primitive"
 	// "srv_recipes/config"
 )
 
@@ -27,23 +30,49 @@ func NewUserHandler(ctx context.Context, collection *mongo.Collection, redisClie
 	}
 }
 
-func (handler *UserHandler) CreateUser(email, hashedPassword string) error {
-	u := models.User{Email: email, Password: hashedPassword, Verified: false, Created: time.Now()}
-	_, err := handler.collection.InsertOne(context.Background(), u)
-	if mongo.IsDuplicateKeyError(err) {
-		return errors.New("user exists")
+func (handler *UserHandler) CreateUser(email, hashedPassword string) (string, error) {
+	u := models.User{
+		Email:    email,
+		Password: hashedPassword,
+		Verified: false,
+		Created:  time.Now(),
 	}
-	return err
+	res, err := handler.collection.InsertOne(context.Background(), u)
+	if mongo.IsDuplicateKeyError(err) {
+		return "", errors.New("user exists")
+	}
+	if err != nil {
+		return "", err
+	}
+
+	idStr := fmt.Sprintf("%v", res.InsertedID)           // ObjectID("6890f1ea6399a8e809680eaa")
+	userID := idStr[10 : len(idStr)-2]
+	return userID, nil
 }
+
+// func (handler *UserService) CreateUser(email, hashedPassword string) (string, error)
+// 	u := models.User{Email: email, Password: hashedPassword, Verified: false, Created: time.Now()}
+// 	_, err := handler.collection.InsertOne(context.Background(), u)
+// 	if mongo.IsDuplicateKeyError(err) {
+// 		return errors.New("user exists")
+// 	}
+// 	return err
+// }
 
 func (handler *UserHandler) GetUserByEmail(email string) (*models.User, error) {
 	var u models.User
 	err := handler.collection.
-		FindOne(context.Background(), bson.M{"email": email}).
-		Decode(&u)
+		FindOne(context.Background(), bson.M{"email": email}).Decode(&u)
 	if err != nil {
 		return nil, err
 	}
+
+	idStr := fmt.Sprintf("%v", u.ID)
+	cleanID := strings.TrimPrefix(idStr, "ObjectID(\"")
+	cleanID = strings.TrimSuffix(cleanID, "\")")
+	u.ID = cleanID // Приводим ID к строке
+
+	fmt.Println("Found user:", u.Email, "Verified:", u.Verified, "ID:", u.ID)
 	return &u, nil
 }
 
