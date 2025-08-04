@@ -9,6 +9,9 @@ import (
 //
 // swagger:model user
 type User struct {
+	// User ID (может быть string или interface{})
+	ID interface{} `bson:"_id,omitempty" json:"id"`
+	
 	// User's login
 	//
 	// required: true
